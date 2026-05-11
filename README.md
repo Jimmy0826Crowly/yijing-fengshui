@@ -4,6 +4,8 @@
 
 基於倪海廈老師易經陽宅學說的 AI 風水分析技能。
 
+> 本專案為非官方、非商業的學習與工具化整理，僅作傳統文化與自我反思參考；不代表原作者、倪海廈老師或相關權利方背書。
+
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 ## 核心理念
@@ -110,6 +112,14 @@ yijing-fengshui/
 
 - 倪海廈老師陽宅學說
 - 《易經》六十四卦
+
+## Credits / Attribution
+
+- 原始專案：[`Wolke/yijing-fengshui`](https://github.com/Wolke/yijing-fengshui)
+- 本 fork：[`Jimmy0826Crowly/yijing-fengshui`](https://github.com/Jimmy0826Crowly/yijing-fengshui)
+- 本 fork 在原始專案基礎上修改了視覺化平面圖建構器，包括多樓層、重要物品、保存/導入配置、Demo 入口與多選整組拖移等功能。
+- 本專案依原授權以 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 釋出：保留署名、限非商業使用，衍生作品需採用相同授權。
+- 若原作者或相關權利方認為署名、引用或內容使用有不妥之處，歡迎提出 issue 或聯繫本 fork 維護者修正。
 
 ## License
 
