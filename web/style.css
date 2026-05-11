@@ -8,6 +8,7 @@
     --success: #4ade80;
     --warning: #fbbf24;
     --danger: #f87171;
+    --object: #4ade80;
 }
 
 * {
@@ -59,7 +60,7 @@ header h1 {
     background: var(--bg-card);
     border-radius: 10px;
     padding: 12px;
-    max-height: 600px;
+    max-height: 650px;
     overflow-y: auto;
 }
 
@@ -110,6 +111,11 @@ header h1 {
     border-left: 3px solid #df9f4a;
 }
 
+.tool-item.object {
+    border-left: 3px solid var(--object);
+    background: linear-gradient(90deg, rgba(74, 222, 128, 0.1), transparent);
+}
+
 /* Canvas Area */
 .canvas-wrapper {
     background: var(--bg-card);
@@ -122,6 +128,8 @@ header h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 8px;
 }
 
@@ -130,9 +138,51 @@ header h1 {
     font-size: 0.85rem;
 }
 
+.canvas-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.floor-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.floor-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.floor-tab,
+.floor-controls button {
+    padding: 5px 9px;
+    border: 1px solid #3a4a5a;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+
+.floor-tab.active {
+    border-color: var(--secondary);
+    background: rgba(201, 162, 39, 0.16);
+    color: #f0d78c;
+}
+
+.floor-controls button:hover,
+.floor-tab:hover {
+    border-color: var(--secondary);
+}
+
 .canvas-actions button {
     padding: 5px 10px;
-    margin-left: 6px;
     border: 1px solid #3a4a5a;
     border-radius: 5px;
     background: transparent;
@@ -271,6 +321,20 @@ header h1 {
     font-weight: bold;
 }
 
+.config-section-title {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin: 8px 0 5px;
+}
+
+.config-item.object-row {
+    border-left: 2px solid var(--object);
+}
+
+.config-item.person-row {
+    border-left: 2px solid #4a9fdf;
+}
+
 .generate-btn {
     padding: 10px;
     border: none;
@@ -398,5 +462,10 @@ footer a {
 
     .tool-item {
         margin-bottom: 0;
+    }
+
+    .canvas-header {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }

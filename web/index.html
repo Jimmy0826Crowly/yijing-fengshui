@@ -12,7 +12,7 @@
     <div class="container">
         <header>
             <h1>🏠 易經陽宅風水 - 平面圖建構器</h1>
-            <p class="subtitle">拖拉房間建構平面圖，再將家人放入臥室</p>
+            <p class="subtitle">拖拉房間建構多樓層平面圖，再將家人與重要物品放入對應位置</p>
         </header>
 
         <div class="main-layout">
@@ -92,14 +92,96 @@
                 <div class="tool-item facility" draggable="true" data-type="facility" data-value="神明廳" data-icon="🙏">
                     <span class="icon">🙏</span> 神明廳
                 </div>
+
+                <h3>🎹 重要物品</h3>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="睡床" data-icon="🛏️">
+                    <span class="icon">🛏️</span> 睡床
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="書桌" data-icon="🖥️">
+                    <span class="icon">🖥️</span> 書桌
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="辦公桌" data-icon="💼">
+                    <span class="icon">💼</span> 辦公桌
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="餐桌" data-icon="🍽️">
+                    <span class="icon">🍽️</span> 餐桌
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="沙發" data-icon="🛋️">
+                    <span class="icon">🛋️</span> 沙發
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="鋼琴" data-icon="🎹">
+                    <span class="icon">🎹</span> 鋼琴
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="佛龕" data-icon="🙏">
+                    <span class="icon">🙏</span> 佛龕
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="神桌" data-icon="🙏">
+                    <span class="icon">🙏</span> 神桌
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="祖先牌位" data-icon="🪧">
+                    <span class="icon">🪧</span> 祖先牌位
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="鏡子" data-icon="🪞">
+                    <span class="icon">🪞</span> 鏡子
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="時鐘" data-icon="🕰️">
+                    <span class="icon">🕰️</span> 時鐘
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="魚缸" data-icon="🐟">
+                    <span class="icon">🐟</span> 魚缸
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="大型植物" data-icon="🪴">
+                    <span class="icon">🪴</span> 大型植物
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="屏風" data-icon="🧱">
+                    <span class="icon">🧱</span> 屏風
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="鞋櫃" data-icon="👞">
+                    <span class="icon">👞</span> 鞋櫃
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="衣櫃" data-icon="🚪">
+                    <span class="icon">🚪</span> 衣櫃
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="冰箱" data-icon="🧊">
+                    <span class="icon">🧊</span> 冰箱
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="洗衣機" data-icon="🧺">
+                    <span class="icon">🧺</span> 洗衣機
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="電視" data-icon="📺">
+                    <span class="icon">📺</span> 電視
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="音響" data-icon="🔊">
+                    <span class="icon">🔊</span> 音響
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="保險櫃" data-icon="🔒">
+                    <span class="icon">🔒</span> 保險櫃
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="爐灶" data-icon="🔥">
+                    <span class="icon">🔥</span> 爐灶
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="水槽" data-icon="🚰">
+                    <span class="icon">🚰</span> 水槽
+                </div>
+                <div class="tool-item object" draggable="true" data-type="object" data-value="垃圾桶" data-icon="🗑️">
+                    <span class="icon">🗑️</span> 垃圾桶
+                </div>
             </div>
 
             <!-- Canvas -->
             <div class="canvas-wrapper">
                 <div class="canvas-header">
-                    <h3>📐 平面圖（上方為北）</h3>
+                    <h3 id="canvasTitle">📐 平面圖（上方為北）</h3>
+                    <div class="floor-controls">
+                        <div class="floor-tabs" id="floorTabs" aria-label="樓層切換"></div>
+                        <button id="addFloor" type="button">＋新增樓層</button>
+                        <button id="deleteFloor" type="button">刪除此層</button>
+                    </div>
                     <div class="canvas-actions">
-                        <button id="clearCanvas">🗑️ 清除全部</button>
+                        <button id="saveConfig" type="button">💾 保存配置</button>
+                        <button id="loadConfig" type="button">📂 導入配置</button>
+                        <input id="loadConfigInput" type="file" accept="application/json,.json" hidden>
+                        <button id="clearCanvas" type="button">🗑️ 清除此層</button>
                     </div>
                 </div>
                 <canvas id="floorCanvas"></canvas>
@@ -119,8 +201,8 @@
                 <h3>📋 配置清單</h3>
                 <div class="config-list" id="configList">
                     <p style="color: var(--text-muted); font-size: 0.75rem;">
-                        1. 先拖拉房間到平面圖<br>
-                        2. 再將家人放入臥室
+                        1. 先建立樓層與房間<br>
+                        2. 再放入家人與重要物品
                     </p>
                 </div>
 
@@ -134,7 +216,9 @@
                     • 拖拉邊角可縮放房間<br>
                     • 拖拉旋轉鈕可旋轉<br>
                     • 雙擊可刪除<br>
-                    • 家人只能放入臥室
+                    • Shift/Ctrl/Command 點擊可多選並整組拖移<br>
+                    • 家人只能放入臥室<br>
+                    • Prompt 會彙整所有樓層
                 </div>
             </div>
         </div>

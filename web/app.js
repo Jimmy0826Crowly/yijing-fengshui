@@ -1,28 +1,83 @@
 // ===== Config =====
 const ROOM_MIN_SIZE = 60;
 const ROOM_DEFAULT_SIZE = 100;
+const OBJECT_MIN_SIZE = 40;
+const OBJECT_DEFAULT_WIDTH = 76;
+const OBJECT_DEFAULT_HEIGHT = 56;
 const PERSON_SIZE = 32;
 const HANDLE_SIZE = 10;
+const CONFIG_SCHEMA = 'yijing-fengshui-builder';
+const CONFIG_SCHEMA_VERSION = 1;
+const FLOOR_LABELS = ['一樓', '二樓', '三樓', '四樓', '五樓', '六樓', '七樓', '八樓', '九樓', '十樓'];
 
 const COLORS = {
     room: { fill: 'rgba(159, 74, 223, 0.3)', stroke: '#9f4adf' },
     facility: { fill: 'rgba(223, 159, 74, 0.3)', stroke: '#df9f4a' },
-    bedroom: { fill: 'rgba(74, 159, 223, 0.2)', stroke: '#4a9fdf' }
+    bedroom: { fill: 'rgba(74, 159, 223, 0.2)', stroke: '#4a9fdf' },
+    object: { fill: 'rgba(74, 222, 128, 0.22)', stroke: '#4ade80' }
 };
 
 // ===== State =====
-let rooms = [];
-let persons = [];
+let floors = [createFloor('一樓')];
+let activeFloorIndex = 0;
+let rooms = floors[0].rooms;
+let persons = floors[0].persons;
 let selectedRoom = null;
+let selectedRooms = new Set();
 let selectedPerson = null;
-let dragMode = null; // 'move', 'resize', 'rotate', 'move-person'
+let dragMode = null; // 'move-room', 'resize', 'rotate', 'move-person'
 let dragStart = { x: 0, y: 0 };
 let originalState = null;
-let compassRotation = 0; // in degrees, 0 = north up
+let compassRotation = floors[0].compassRotation; // in degrees, 0 = north up
 
 // ===== Canvas Setup =====
 const canvas = document.getElementById('floorCanvas');
 const ctx = canvas.getContext('2d');
+const floorTabs = document.getElementById('floorTabs');
+const canvasTitle = document.getElementById('canvasTitle');
+const compass = document.getElementById('compass');
+const compassInner = document.getElementById('compassInner');
+
+function createFloor(name) {
+    return {
+        id: `floor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        rooms: [],
+        persons: [],
+        compassRotation: 0
+    };
+}
+
+function getActiveFloor() {
+    return floors[activeFloorIndex];
+}
+
+function refreshActiveCollections() {
+    const floor = getActiveFloor();
+    rooms = floor.rooms;
+    persons = floor.persons;
+    compassRotation = floor.compassRotation || 0;
+    updateCompassVisual();
+}
+
+function saveActiveCompass() {
+    getActiveFloor().compassRotation = compassRotation;
+}
+
+function getNextFloorName() {
+    return FLOOR_LABELS[floors.length] || `${floors.length + 1}樓`;
+}
+
+function hidePromptOutput() {
+    document.getElementById('promptOutput').classList.remove('show');
+    document.getElementById('copyBtn').classList.remove('show');
+}
+
+function updateCompassVisual() {
+    if (compassInner) {
+        compassInner.style.transform = `rotate(${compassRotation}deg)`;
+    }
+}
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -32,14 +87,70 @@ function resizeCanvas() {
 }
 
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+
+// ===== Floor Controls =====
+function renderFloorTabs() {
+    floorTabs.innerHTML = floors.map((floor, index) => `
+        <button class="floor-tab ${index === activeFloorIndex ? 'active' : ''}" type="button" data-index="${index}">
+            ${floor.name}
+        </button>
+    `).join('');
+
+    floorTabs.querySelectorAll('.floor-tab').forEach(tab => {
+        tab.addEventListener('click', () => switchFloor(Number(tab.dataset.index)));
+    });
+
+    canvasTitle.textContent = `📐 ${getActiveFloor().name} 平面圖（上方為北）`;
+}
+
+function switchFloor(index) {
+    if (index === activeFloorIndex || !floors[index]) return;
+
+    saveActiveCompass();
+    activeFloorIndex = index;
+    clearEntitySelection();
+    selectedPerson = null;
+    dragMode = null;
+    refreshActiveCollections();
+    renderFloorTabs();
+    draw();
+    updateConfigList();
+}
+
+document.getElementById('addFloor').addEventListener('click', () => {
+    saveActiveCompass();
+    floors.push(createFloor(getNextFloorName()));
+    activeFloorIndex = floors.length - 1;
+    clearEntitySelection();
+    selectedPerson = null;
+    refreshActiveCollections();
+    renderFloorTabs();
+    draw();
+    updateConfigList();
+});
+
+document.getElementById('deleteFloor').addEventListener('click', () => {
+    if (floors.length === 1) {
+        showToast('至少需要保留一個樓層');
+        return;
+    }
+
+    floors.splice(activeFloorIndex, 1);
+    activeFloorIndex = Math.max(0, activeFloorIndex - 1);
+    clearEntitySelection();
+    selectedPerson = null;
+    refreshActiveCollections();
+    renderFloorTabs();
+    draw();
+    updateConfigList();
+});
 
 // ===== Utility =====
 function isBedroom(value) {
     return value.includes('臥室') || value === '主臥室';
 }
 
-function getDirection(x, y, w, h) {
+function getDirection(x, y, w, h, rotation = compassRotation) {
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const objCenterX = x + w / 2;
@@ -53,7 +164,7 @@ function getDirection(x, y, w, h) {
 
     // Calculate angle and adjust for compass rotation
     let angle = Math.atan2(-dy, dx) * 180 / Math.PI;
-    angle = angle - compassRotation; // Adjust for compass rotation
+    angle = angle - rotation;
 
     // Normalize angle to -180 to 180
     while (angle > 180) angle -= 360;
@@ -71,20 +182,280 @@ function getDirection(x, y, w, h) {
     return '中央';
 }
 
+function getEntityCenter(entity) {
+    return {
+        x: entity.x + entity.w / 2,
+        y: entity.y + entity.h / 2
+    };
+}
+
 function isInsideRoom(px, py, room) {
     // Simple rectangle check (ignoring rotation for now)
     return px >= room.x && px <= room.x + room.w &&
         py >= room.y && py <= room.y + room.h;
 }
 
-function findBedroomAt(x, y) {
-    for (let i = rooms.length - 1; i >= 0; i--) {
-        if (isBedroom(rooms[i].value) && isInsideRoom(x, y, rooms[i])) {
-            return rooms[i];
+function findBedroomAt(x, y, floor = getActiveFloor()) {
+    for (let i = floor.rooms.length - 1; i >= 0; i--) {
+        if (isBedroom(floor.rooms[i].value) && isInsideRoom(x, y, floor.rooms[i])) {
+            return floor.rooms[i];
         }
     }
     return null;
 }
+
+function findContainingSpace(entity, floor = getActiveFloor()) {
+    const center = getEntityCenter(entity);
+
+    for (let i = floor.rooms.length - 1; i >= 0; i--) {
+        const candidate = floor.rooms[i];
+        if (candidate === entity || candidate.type === 'object') continue;
+        if (isInsideRoom(center.x, center.y, candidate)) {
+            return candidate;
+        }
+    }
+
+    return null;
+}
+
+function getEntityColors(entity) {
+    if (isBedroom(entity.value)) return COLORS.bedroom;
+    return COLORS[entity.type] || COLORS.room;
+}
+
+function removePersonFromAllFloors(value) {
+    floors.forEach(floor => {
+        floor.persons = floor.persons.filter(p => p.value !== value);
+    });
+    refreshActiveCollections();
+}
+
+function removeEntityAt(index) {
+    rooms.splice(index, 1);
+    persons = persons
+        .filter(p => p.bedroomId !== index)
+        .map(p => p.bedroomId > index ? { ...p, bedroomId: p.bedroomId - 1 } : p);
+    getActiveFloor().persons = persons;
+    clearEntitySelection();
+    selectedPerson = null;
+}
+
+function clearEntitySelection() {
+    selectedRoom = null;
+    selectedRooms.clear();
+}
+
+function selectSingleEntity(index) {
+    selectedRooms.clear();
+    selectedRooms.add(index);
+    selectedRoom = index;
+}
+
+function toggleEntitySelection(index) {
+    if (selectedRooms.has(index)) {
+        selectedRooms.delete(index);
+        selectedRoom = selectedRooms.size > 0 ? [...selectedRooms][selectedRooms.size - 1] : null;
+        return;
+    }
+
+    selectedRooms.add(index);
+    selectedRoom = index;
+}
+
+function isEntitySelected(index) {
+    return selectedRooms.has(index);
+}
+
+function getSelectedEntityIndexes() {
+    return [...selectedRooms].filter(index => rooms[index]);
+}
+
+function startEntityMove(index, x, y) {
+    selectedRoom = index;
+    dragMode = 'move-room';
+    dragStart = { x, y };
+    originalState = {
+        entities: getSelectedEntityIndexes().map(entityIndex => ({
+            index: entityIndex,
+            x: rooms[entityIndex].x,
+            y: rooms[entityIndex].y
+        }))
+    };
+}
+
+// ===== Save / Load Config =====
+function cloneEntity(entity) {
+    return {
+        type: entity.type || 'room',
+        value: entity.value || '',
+        icon: entity.icon || '',
+        x: Number(entity.x) || 0,
+        y: Number(entity.y) || 0,
+        w: Number(entity.w) || ROOM_DEFAULT_SIZE,
+        h: Number(entity.h) || ROOM_DEFAULT_SIZE,
+        rotation: Number(entity.rotation) || 0
+    };
+}
+
+function clonePerson(person) {
+    return {
+        value: person.value || '',
+        icon: person.icon || '',
+        bedroomId: Number(person.bedroomId) || 0,
+        offsetX: Number(person.offsetX) || 0,
+        offsetY: Number(person.offsetY) || 0
+    };
+}
+
+function createConfigPayload() {
+    saveActiveCompass();
+    return {
+        schema: CONFIG_SCHEMA,
+        version: CONFIG_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        activeFloorIndex,
+        floors: floors.map((floor, index) => ({
+            name: floor.name || FLOOR_LABELS[index] || `${index + 1}樓`,
+            compassRotation: Number(floor.compassRotation) || 0,
+            rooms: floor.rooms.map(cloneEntity),
+            persons: floor.persons.map(clonePerson)
+        }))
+    };
+}
+
+function getConfigFileName() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    return `yijing-fengshui-layout-${stamp}.json`;
+}
+
+function downloadConfig(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = getConfigFileName();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function normalizeEntity(entity) {
+    const type = ['room', 'facility', 'object'].includes(entity.type) ? entity.type : 'room';
+    const isObject = type === 'object';
+    return {
+        type,
+        value: String(entity.value || ''),
+        icon: String(entity.icon || ''),
+        x: Number.isFinite(Number(entity.x)) ? Number(entity.x) : 100,
+        y: Number.isFinite(Number(entity.y)) ? Number(entity.y) : 100,
+        w: Math.max(isObject ? OBJECT_MIN_SIZE : ROOM_MIN_SIZE, Number(entity.w) || (isObject ? OBJECT_DEFAULT_WIDTH : ROOM_DEFAULT_SIZE)),
+        h: Math.max(isObject ? OBJECT_MIN_SIZE : ROOM_MIN_SIZE, Number(entity.h) || (isObject ? OBJECT_DEFAULT_HEIGHT : ROOM_DEFAULT_SIZE)),
+        rotation: Number.isFinite(Number(entity.rotation)) ? Number(entity.rotation) : 0
+    };
+}
+
+function normalizePerson(person, roomCount) {
+    const bedroomId = Number(person.bedroomId);
+    return {
+        value: String(person.value || ''),
+        icon: String(person.icon || ''),
+        bedroomId: Math.min(Math.max(Number.isFinite(bedroomId) ? bedroomId : 0, 0), Math.max(0, roomCount - 1)),
+        offsetX: Number.isFinite(Number(person.offsetX)) ? Number(person.offsetX) : 0,
+        offsetY: Number.isFinite(Number(person.offsetY)) ? Number(person.offsetY) : 0
+    };
+}
+
+function normalizeImportedFloors(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.floors)) return data.floors;
+
+    // Backward compatibility for a future/handmade single-floor file.
+    if (Array.isArray(data.rooms) || Array.isArray(data.persons)) {
+        return [{
+            name: data.name || '一樓',
+            rooms: data.rooms || [],
+            persons: data.persons || [],
+            compassRotation: data.compassRotation || 0
+        }];
+    }
+
+    throw new Error('找不到 floors / rooms 配置資料');
+}
+
+function loadConfigData(data) {
+    if (!data || typeof data !== 'object') {
+        throw new Error('配置檔格式不正確');
+    }
+
+    if (data.schema && data.schema !== CONFIG_SCHEMA) {
+        throw new Error('這不是易經陽宅風水平面圖配置檔');
+    }
+
+    const importedFloors = normalizeImportedFloors(data)
+        .map((floor, index) => {
+            const normalizedRooms = Array.isArray(floor.rooms) ? floor.rooms.map(normalizeEntity) : [];
+            return {
+                id: `floor-${Date.now()}-${index}`,
+                name: String(floor.name || FLOOR_LABELS[index] || `${index + 1}樓`),
+                rooms: normalizedRooms,
+                persons: Array.isArray(floor.persons)
+                    ? floor.persons
+                        .map(person => normalizePerson(person, normalizedRooms.length))
+                        .filter(person => normalizedRooms[person.bedroomId] && isBedroom(normalizedRooms[person.bedroomId].value))
+                    : [],
+                compassRotation: Number.isFinite(Number(floor.compassRotation)) ? Number(floor.compassRotation) : 0
+            };
+        })
+        .filter(floor => floor.rooms.length > 0 || floor.persons.length > 0 || floor.name);
+
+    if (importedFloors.length === 0) {
+        throw new Error('配置檔沒有可用樓層');
+    }
+
+    floors = importedFloors;
+    activeFloorIndex = Math.min(Math.max(Number(data.activeFloorIndex) || 0, 0), floors.length - 1);
+    clearEntitySelection();
+    selectedPerson = null;
+    dragMode = null;
+    refreshActiveCollections();
+    renderFloorTabs();
+    draw();
+    updateConfigList();
+    hidePromptOutput();
+}
+
+document.getElementById('saveConfig').addEventListener('click', () => {
+    downloadConfig(createConfigPayload());
+    showToast('✅ 配置已保存為 JSON 檔');
+});
+
+document.getElementById('loadConfig').addEventListener('click', () => {
+    document.getElementById('loadConfigInput').click();
+});
+
+document.getElementById('loadConfigInput').addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(reader.result);
+            loadConfigData(data);
+            showToast('✅ 配置已導入，可繼續修改');
+        } catch (error) {
+            showToast(`⚠️ 導入失敗：${error.message}`);
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.onerror = () => {
+        showToast('⚠️ 無法讀取配置檔');
+        event.target.value = '';
+    };
+    reader.readAsText(file, 'utf-8');
+});
 
 // ===== Drawing =====
 function draw() {
@@ -101,7 +472,7 @@ function draw() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Draw rooms
+    // Draw rooms, facilities and objects
     rooms.forEach((room, idx) => {
         ctx.save();
 
@@ -111,25 +482,25 @@ function draw() {
         ctx.rotate(room.rotation || 0);
         ctx.translate(-cx, -cy);
 
-        const colors = isBedroom(room.value) ? COLORS.bedroom :
-            (room.type === 'room' ? COLORS.room : COLORS.facility);
+        const colors = getEntityColors(room);
 
         // Fill
         ctx.fillStyle = colors.fill;
         ctx.fillRect(room.x, room.y, room.w, room.h);
 
         // Border
-        ctx.strokeStyle = selectedRoom === idx ? '#fff' : colors.stroke;
-        ctx.lineWidth = selectedRoom === idx ? 3 : 2;
+        const isSelected = isEntitySelected(idx);
+        ctx.strokeStyle = isSelected ? '#fff' : colors.stroke;
+        ctx.lineWidth = isSelected ? 3 : 2;
         ctx.strokeRect(room.x, room.y, room.w, room.h);
 
         // Icon & Label
         ctx.fillStyle = '#fff';
-        ctx.font = '20px Arial';
+        ctx.font = room.type === 'object' ? '18px Arial' : '20px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(room.icon, cx, cy - 5);
 
-        ctx.font = 'bold 11px Arial';
+        ctx.font = room.type === 'object' ? 'bold 10px Arial' : 'bold 11px Arial';
         ctx.fillText(room.value, cx, cy + 15);
 
         // Direction
@@ -141,7 +512,7 @@ function draw() {
         ctx.restore();
 
         // Resize handle (when selected)
-        if (selectedRoom === idx) {
+        if (selectedRoom === idx && selectedRooms.size <= 1) {
             ctx.fillStyle = '#fff';
             ctx.fillRect(room.x + room.w - HANDLE_SIZE, room.y + room.h - HANDLE_SIZE, HANDLE_SIZE, HANDLE_SIZE);
 
@@ -179,8 +550,8 @@ function addItemToCanvas(type, value, icon, targetX, targetY) {
         const bedroom = findBedroomAt(targetX, targetY);
         if (bedroom) {
             const bedroomIdx = rooms.indexOf(bedroom);
-            // Remove existing person with same value
-            persons = persons.filter(p => p.value !== value);
+            removePersonFromAllFloors(value);
+
             // Store as offset from bedroom center (fixed position)
             const personsInRoom = persons.filter(p => p.bedroomId === bedroomIdx).length;
             const offsetX = (personsInRoom % 2) * 30 - 15;
@@ -197,17 +568,24 @@ function addItemToCanvas(type, value, icon, targetX, targetY) {
             return false;
         }
     } else {
-        // Room or facility - random position if no target
-        const x = targetX || (100 + Math.random() * (canvas.width - 300));
-        const y = targetY || (100 + Math.random() * (canvas.height - 300));
+        const isObject = type === 'object';
+        const defaultW = isObject ? OBJECT_DEFAULT_WIDTH : ROOM_DEFAULT_SIZE;
+        const defaultH = isObject ? OBJECT_DEFAULT_HEIGHT : ROOM_DEFAULT_SIZE;
+        const minX = 80 + defaultW / 2;
+        const minY = 80 + defaultH / 2;
+        const maxX = Math.max(minX, canvas.width - defaultW);
+        const maxY = Math.max(minY, canvas.height - defaultH);
+        const spawnX = typeof targetX === 'number' ? targetX : (minX + Math.random() * (maxX - minX));
+        const spawnY = typeof targetY === 'number' ? targetY : (minY + Math.random() * (maxY - minY));
+
         rooms.push({
             type,
             value,
             icon,
-            x: x - ROOM_DEFAULT_SIZE / 2,
-            y: y - ROOM_DEFAULT_SIZE / 2,
-            w: ROOM_DEFAULT_SIZE,
-            h: ROOM_DEFAULT_SIZE,
+            x: spawnX - defaultW / 2,
+            y: spawnY - defaultH / 2,
+            w: defaultW,
+            h: defaultH,
             rotation: 0
         });
     }
@@ -231,7 +609,7 @@ document.querySelectorAll('.tool-item').forEach(item => {
     });
 
     // Click to spawn (only if not dragging)
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', () => {
         // Skip if this was a drag action
         if (isDraggingFromToolbox) {
             isDraggingFromToolbox = false;
@@ -259,7 +637,7 @@ document.querySelectorAll('.tool-item').forEach(item => {
             const cy = targetBedroom.y + targetBedroom.h / 2;
             addItemToCanvas(type, value, icon, cx, cy);
         } else {
-            // Random position for rooms/facilities
+            // Random position for rooms/facilities/objects
             addItemToCanvas(type, value, icon, null, null);
         }
         draw();
@@ -299,7 +677,7 @@ canvas.addEventListener('mousedown', (e) => {
         const py = bedroom.y + bedroom.h / 2 + (p.offsetY || 0);
         if (Math.abs(mx - px) < PERSON_SIZE / 2 && Math.abs(my - py) < PERSON_SIZE / 2) {
             selectedPerson = i;
-            selectedRoom = null;
+            clearEntitySelection();
             dragMode = 'move-person';
             dragStart = { x: mx, y: my };
             originalState = { bedroomId: p.bedroomId, offsetX: p.offsetX, offsetY: p.offsetY };
@@ -308,17 +686,17 @@ canvas.addEventListener('mousedown', (e) => {
         }
     }
 
-    // Check rooms
+    // Check entities
     for (let i = rooms.length - 1; i >= 0; i--) {
         const r = rooms[i];
 
         // Resize handle
-        if (selectedRoom === i) {
+        if (selectedRoom === i && selectedRooms.size <= 1) {
             if (mx >= r.x + r.w - HANDLE_SIZE && mx <= r.x + r.w &&
                 my >= r.y + r.h - HANDLE_SIZE && my <= r.y + r.h) {
                 dragMode = 'resize';
                 dragStart = { x: mx, y: my };
-                originalState = { w: r.w, h: r.h };
+                originalState = { w: r.w, h: r.h, minSize: r.type === 'object' ? OBJECT_MIN_SIZE : ROOM_MIN_SIZE };
                 return;
             }
 
@@ -333,18 +711,32 @@ canvas.addEventListener('mousedown', (e) => {
             }
         }
 
-        // Room body
+        // Entity body
         if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-            selectedRoom = i;
+            const multiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+
+            if (multiSelect) {
+                toggleEntitySelection(i);
+                selectedPerson = null;
+
+                if (!isEntitySelected(i)) {
+                    draw();
+                    return;
+                }
+            } else if (!isEntitySelected(i) || selectedRooms.size <= 1) {
+                selectSingleEntity(i);
+            } else {
+                selectedRoom = i;
+            }
+
             selectedPerson = null;
-            dragMode = 'move-room';
-            dragStart = { x: mx - r.x, y: my - r.y };
+            startEntityMove(i, mx, my);
             draw();
             return;
         }
     }
 
-    selectedRoom = null;
+    clearEntitySelection();
     selectedPerson = null;
     draw();
 });
@@ -357,13 +749,19 @@ canvas.addEventListener('mousemove', (e) => {
     const my = e.clientY - rect.top;
 
     if (dragMode === 'move-room' && selectedRoom !== null) {
-        rooms[selectedRoom].x = mx - dragStart.x;
-        rooms[selectedRoom].y = my - dragStart.y;
+        const dx = mx - dragStart.x;
+        const dy = my - dragStart.y;
+        originalState.entities.forEach(entity => {
+            if (!rooms[entity.index]) return;
+            rooms[entity.index].x = entity.x + dx;
+            rooms[entity.index].y = entity.y + dy;
+        });
     } else if (dragMode === 'resize' && selectedRoom !== null) {
         const dx = mx - dragStart.x;
         const dy = my - dragStart.y;
-        rooms[selectedRoom].w = Math.max(ROOM_MIN_SIZE, originalState.w + dx);
-        rooms[selectedRoom].h = Math.max(ROOM_MIN_SIZE, originalState.h + dy);
+        const minSize = originalState.minSize || ROOM_MIN_SIZE;
+        rooms[selectedRoom].w = Math.max(minSize, originalState.w + dx);
+        rooms[selectedRoom].h = Math.max(minSize, originalState.h + dy);
     } else if (dragMode === 'rotate' && selectedRoom !== null) {
         const r = rooms[selectedRoom];
         const cx = r.x + r.w / 2;
@@ -384,7 +782,7 @@ canvas.addEventListener('mousemove', (e) => {
     updateConfigList();
 });
 
-canvas.addEventListener('mouseup', (e) => {
+canvas.addEventListener('mouseup', () => {
     if (dragMode === 'move-person' && selectedPerson !== null) {
         const p = persons[selectedPerson];
         const bedroom = rooms[p.bedroomId];
@@ -435,14 +833,11 @@ canvas.addEventListener('dblclick', (e) => {
         }
     }
 
-    // Check rooms
+    // Check entities
     for (let i = rooms.length - 1; i >= 0; i--) {
         const r = rooms[i];
         if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-            // Remove persons in this room too
-            persons = persons.filter(p => p.bedroomId !== i);
-            rooms.splice(i, 1);
-            selectedRoom = null;
+            removeEntityAt(i);
             draw();
             updateConfigList();
             return;
@@ -475,98 +870,129 @@ function showToast(msg) {
 // ===== Config List =====
 function updateConfigList() {
     const list = document.getElementById('configList');
+    const activeFloor = getActiveFloor();
 
     if (rooms.length === 0 && persons.length === 0) {
         list.innerHTML = `<p style="color: var(--text-muted); font-size: 0.75rem;">
+            目前在 ${activeFloor.name}<br>
             1. 先拖拉房間到平面圖<br>
-            2. 再將家人放入臥室
+            2. 再放入家人與重要物品
         </p>`;
         return;
     }
 
-    let html = '';
+    const spaces = rooms.filter(r => r.type !== 'object');
+    const objects = rooms.filter(r => r.type === 'object');
+    let html = `<div class="config-section-title">${activeFloor.name}</div>`;
 
-    rooms.forEach(r => {
-        const dir = getDirection(r.x, r.y, r.w, r.h);
-        html += `<div class="config-item">
-            <span>${r.icon} ${r.value}</span>
-            <span class="dir">${dir}</span>
-        </div>`;
-    });
+    if (spaces.length > 0) {
+        html += `<div class="config-section-title">房間/設施</div>`;
+        spaces.forEach(r => {
+            const dir = getDirection(r.x, r.y, r.w, r.h);
+            html += `<div class="config-item">
+                <span>${r.icon} ${r.value}</span>
+                <span class="dir">${dir}</span>
+            </div>`;
+        });
+    }
 
-    persons.forEach(p => {
-        const bedroom = rooms[p.bedroomId];
-        const dir = bedroom ? getDirection(bedroom.x, bedroom.y, bedroom.w, bedroom.h) : '?';
-        html += `<div class="config-item" style="border-left: 2px solid #4a9fdf;">
-            <span>${p.icon} ${p.value}</span>
-            <span class="dir">${dir}</span>
-        </div>`;
-    });
+    if (persons.length > 0) {
+        html += `<div class="config-section-title">家庭成員</div>`;
+        persons.forEach(p => {
+            const bedroom = rooms[p.bedroomId];
+            const dir = bedroom ? getDirection(bedroom.x, bedroom.y, bedroom.w, bedroom.h) : '?';
+            html += `<div class="config-item person-row">
+                <span>${p.icon} ${p.value}</span>
+                <span class="dir">${dir}</span>
+            </div>`;
+        });
+    }
+
+    if (objects.length > 0) {
+        html += `<div class="config-section-title">重要物品</div>`;
+        objects.forEach(obj => {
+            const dir = getDirection(obj.x, obj.y, obj.w, obj.h);
+            const container = findContainingSpace(obj);
+            html += `<div class="config-item object-row">
+                <span>${obj.icon} ${obj.value}${container ? ` / ${container.value}` : ''}</span>
+                <span class="dir">${dir}</span>
+            </div>`;
+        });
+    }
 
     list.innerHTML = html;
 }
 
 // ===== Clear =====
 document.getElementById('clearCanvas').addEventListener('click', () => {
-    rooms = [];
-    persons = [];
-    selectedRoom = null;
+    const activeFloor = getActiveFloor();
+    activeFloor.rooms = [];
+    activeFloor.persons = [];
+    clearEntitySelection();
     selectedPerson = null;
+    refreshActiveCollections();
     draw();
     updateConfigList();
-    document.getElementById('promptOutput').classList.remove('show');
-    document.getElementById('copyBtn').classList.remove('show');
+    hidePromptOutput();
 });
 
 // ===== Generate Prompt =====
 document.getElementById('generateBtn').addEventListener('click', () => {
-    if (rooms.length === 0) {
+    saveActiveCompass();
+
+    const hasAnyLayout = floors.some(floor => floor.rooms.length > 0 || floor.persons.length > 0);
+    if (!hasAnyLayout) {
         showToast('請先放置至少一個房間');
         return;
     }
 
-    const family = [];
-    const roomsData = [];
+    let prompt = `請幫我分析多樓層住宅風水：\n\n`;
 
-    // Collect Family Data
-    persons.forEach(p => {
-        const bedroom = rooms[p.bedroomId];
-        if (bedroom) {
-            const dir = getDirection(bedroom.x, bedroom.y, bedroom.w, bedroom.h);
-            family.push({ member: p.value, dir: dir });
+    floors.forEach(floor => {
+        if (floor.rooms.length === 0 && floor.persons.length === 0) return;
+
+        prompt += `【${floor.name}】\n`;
+        prompt += `方位說明：以下方位已依此樓層羅盤設定換算。\n\n`;
+
+        if (floor.persons.length > 0) {
+            prompt += `【家庭成員臥室位置】\n`;
+            floor.persons.forEach(p => {
+                const bedroom = floor.rooms[p.bedroomId];
+                if (!bedroom) return;
+                const dir = getDirection(bedroom.x, bedroom.y, bedroom.w, bedroom.h, floor.compassRotation || 0);
+                prompt += `- ${p.value}：${dir}（${bedroom.value}）\n`;
+            });
+            prompt += '\n';
+        }
+
+        const spaces = floor.rooms.filter(r => r.type !== 'object');
+        if (spaces.length > 0) {
+            prompt += `【房間/設施位置】\n`;
+            spaces.forEach(item => {
+                const dir = getDirection(item.x, item.y, item.w, item.h, floor.compassRotation || 0);
+                prompt += `- ${item.value}：${dir}\n`;
+            });
+            prompt += '\n';
+        }
+
+        const objects = floor.rooms.filter(r => r.type === 'object');
+        if (objects.length > 0) {
+            prompt += `【重要物品位置】\n`;
+            objects.forEach(item => {
+                const dir = getDirection(item.x, item.y, item.w, item.h, floor.compassRotation || 0);
+                const container = findContainingSpace(item, floor);
+                prompt += `- ${item.value}：${dir}${container ? `（${container.value}內）` : ''}\n`;
+            });
+            prompt += '\n';
         }
     });
-
-    // Collect Rooms Data
-    rooms.forEach(r => {
-        if (!isBedroom(r.value)) {
-            const dir = getDirection(r.x, r.y, r.w, r.h);
-            roomsData.push({ room: r.value, dir: dir });
-        }
-    });
-
-    let prompt = `請幫我分析住宅風水：\n\n`;
-
-    if (family.length > 0) {
-        prompt += `【家庭成員臥室位置】\n`;
-        family.forEach(item => {
-            prompt += `- ${item.member}：${item.dir}\n`;
-        });
-        prompt += '\n';
-    }
-
-    if (roomsData.length > 0) {
-        prompt += `【房間/設施位置】\n`;
-        roomsData.forEach(item => {
-            prompt += `- ${item.room}：${item.dir}\n`;
-        });
-        prompt += '\n';
-    }
 
     prompt += `請根據易經陽宅風水理論分析：
-1. 各成員的卦象與吉凶
-2. 房間位置的風水影響
-3. 改善建議
+1. 各樓層的整體格局與重點問題
+2. 各成員的卦象與吉凶
+3. 房間、設施與重要物品位置的風水影響
+4. 多樓層之間是否有需要留意的承接關係
+5. 改善建議
 
 （使用 yijing-fengshui Skill）`;
 
@@ -594,8 +1020,6 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 });
 
 // ===== Compass Rotation =====
-const compass = document.getElementById('compass');
-const compassInner = document.getElementById('compassInner');
 let isRotatingCompass = false;
 let compassStartAngle = 0;
 
@@ -615,9 +1039,10 @@ document.addEventListener('mousemove', (e) => {
     const cy = rect.top + rect.height / 2;
     const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
     compassRotation = currentAngle - compassStartAngle;
+    saveActiveCompass();
 
     // Update visual rotation
-    compassInner.style.transform = `rotate(${compassRotation}deg)`;
+    updateCompassVisual();
 
     // Redraw to update directions
     draw();
@@ -627,3 +1052,7 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
     isRotatingCompass = false;
 });
+
+renderFloorTabs();
+resizeCanvas();
+updateConfigList();
