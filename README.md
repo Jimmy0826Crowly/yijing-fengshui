@@ -51,9 +51,9 @@ python scripts/fengshui_calc.py --analyze \
 
 ### 使用網頁介面
 
-提供視覺化平面圖建構器，可拖拉房間和家庭成員：
+提供視覺化平面圖建構器，可拖拉房間、家庭成員與重要物品，並支援多樓層、保存/導入配置與多選整組拖移：
 
-**[👉 點此直接進行線上體驗 (Demo)](https://wolke.github.io/yijing-fengshui/)**
+**[👉 點此直接進行線上體驗 (Demo)](https://jimmy0826crowly.github.io/yijing-fengshui/)**
 
 或者本地運行：
 
@@ -65,20 +65,26 @@ npx -y serve .
 
 **功能：**
 - 🖱️ 點擊或拖拉房間到畫布
+- 🏠 建立與切換多個樓層
+- 🎹 放置睡床、書桌、餐桌、神桌、鏡子、魚缸、爐灶等重要物品
 - 📐 拖拉邊角縮放房間
 - 🔄 拖拉黃點旋轉房間
+- 🧩 Shift/Ctrl/Command 點擊多選，整組拖移不打亂局部布局
 - 👨‍👩‍👧‍👦 將家人放入臥室（會跟著房間移動）
+- 💾 將布局保存為 JSON，日後可導入繼續修改
 - 📋 一鍵生成 AI 分析 Prompt
 
 ## 專案結構
 
 ```
 yijing-fengshui/
+├── index.html            # Demo 入口，跳轉至 web/index.html
 ├── SKILL.md              # AI 技能指引
 ├── README.md             # 本文件
 ├── LICENSE               # CC BY-NC-SA 4.0
 ├── scripts/
 │   └── fengshui_calc.py  # 卦象計算工具
+├── web/                  # 視覺化平面圖建構器
 └── references/
     ├── 64gua.md          # 六十四卦詳解
     ├── bagua-wanwu.md    # 八卦萬物類象
